@@ -69,7 +69,7 @@ class Lexer:
         self.line = 1
         self.column = 0
 
-    def lex(self) -> List[Token]:
+    def tokenize(self) -> List[Token]:
         while not self.is_at_end():
             self.start = self.current
             self.lex_token()
@@ -86,6 +86,8 @@ class Lexer:
             case ',': self.add_token(TokenType.COMMA)
             case ':': self.add_token(TokenType.COLON)
             case '"': self.lex_string()
+
+        if self.is_digit(char) or char == '-': self.lex_number()
 
 
 
@@ -139,6 +141,33 @@ class Lexer:
 
         self.add_token(TokenType.STR, res)
 
+    def lex_number(self):
+        if self.peek() == "-" and not self.is_digit(self.peek2()):
+            raise Exception(f"Expected digit following negative got {self.peek2()} following at line {self.line} and col {self.column}")
+
+        while self.is_digit(self.peek()):
+            self.advance()
+
+        if self.peek() == '.' and not self.is_digit(self.peek2()):
+            raise Exception(f"Expected digit following dot got {self.peek2()} following at line {self.line} and col {self.column}")
+
+
+        if self.peek() == '.' and self.is_digit(self.peek2()):
+            self.advance()
+
+            while self.is_digit(self.peek()):
+                self.advance()
+
+        if self.peek() in ['e', 'E']:
+            self.advance()
+            if self.peek() in ['+', '-'] or self.is_digit(self.peek()):
+                self.advance()
+                while self.is_digit(self.peek()):
+                    self.advance()
+
+        self.add_token(TokenType.NUM)
+
+
 
     # looks at curr char DOES NOT REMOVE
     def peek(self) -> str:
@@ -181,18 +210,32 @@ class Lexer:
 
 if __name__ == "__main__":
     # Working
+    # json_input = '''{
+    #   "simple": "This is a string",
+    #   "escaped_quote": "She said, \\\"Hello!\\\"",
+    #   "newline": "Line 1\\nLine 2",
+    #   "tab": "Column1\\tColumn2",
+    #   "backslash": "This is a backslash: \\\\",
+    #   "unicode": "Emoji: \\uD83D\\uDE80",
+    #   "mixed": "This \\\"string\\\" has \\t multiple\\nescapes \\\\ and unicode \\u2603"
+    # }'''
+
+
     json_input = '''{
-      "simple": "This is a string",
-      "escaped_quote": "She said, \\\"Hello!\\\"",
-      "newline": "Line 1\\nLine 2",
-      "tab": "Column1\\tColumn2",
-      "backslash": "This is a backslash: \\\\",
-      "unicode": "Emoji: \\uD83D\\uDE80",
-      "mixed": "This \\\"string\\\" has \\t multiple\\nescapes \\\\ and unicode \\u2603"
+      "integer": 42,
+      "negative_integer": -42,
+      "zero": 0,
+      "float": 3.14159,
+      "negative_float": -2.71828,
+      "exponent_positive": 1.23e4,
+      "exponent_negative": 5.67E-8,
+      "large_integer": 1234567890,
+      "small_negative_float": -0.0000123,
+      "leading_zero": 0.1234
     }'''
 
     lexer = Lexer(json_input)
-    tokens = lexer.lex()
+    tokens = lexer.tokenize()
     for token in tokens:
         print(token)
         print()
