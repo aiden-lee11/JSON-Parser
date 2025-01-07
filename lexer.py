@@ -42,6 +42,9 @@ class TokenType(Enum):
     NUM = auto()
     BOOL = auto()
     NULL = auto()
+    OBJECT = auto()
+    VALUE = auto()
+    ARRAY = auto()
     LBRACE = auto()
     RBRACE = auto()
     LBRACKET = auto()
@@ -89,7 +92,8 @@ class Lexer:
 
         if self.is_digit(char) or char == '-': self.lex_number()
 
-
+        if char == " " or self.peekNextTwo() in ['\n', '\r', '\t']: self.lex_whitespace()
+  
 
     def lex_string(self):
         res = ""
@@ -167,6 +171,15 @@ class Lexer:
 
         self.add_token(TokenType.NUM)
 
+    def lex_whitespace(self):
+        white_space = ['\n', '\r', '\t']
+
+        while not self.is_at_end() and (self.peek() == " " or self.peekNextTwo() in white_space):
+            if self.peek() == " ":
+                self.advance()
+            else:
+                self.advance()
+                self.advance()
 
 
     # looks at curr char DOES NOT REMOVE
@@ -181,6 +194,12 @@ class Lexer:
             return '\0'
         
         return self.source[self.current + 1]
+    
+    def peekNextTwo(self) -> str:
+        if self.current + 1 >= len(self.source):
+            return '\0'
+        
+        return self.source[self.current: self.current + 1]
 
     def previous(self) -> str:
         return self.source[self.current - 1]
@@ -221,18 +240,30 @@ if __name__ == "__main__":
     # }'''
 
 
-    json_input = '''{
-      "integer": 42,
-      "negative_integer": -42,
-      "zero": 0,
-      "float": 3.14159,
-      "negative_float": -2.71828,
-      "exponent_positive": 1.23e4,
-      "exponent_negative": 5.67E-8,
-      "large_integer": 1234567890,
-      "small_negative_float": -0.0000123,
-      "leading_zero": 0.1234
-    }'''
+    # json_input = '''{
+    #   "integer": 42,
+    #   "negative_integer": -42,
+    #   "zero": 0,
+    #   "float": 3.14159,
+    #   "negative_float": -2.71828,
+    #   "exponent_positive": 1.23e4,
+    #   "exponent_negative": 5.67E-8,
+    #   "large_integer": 1234567890,
+    #   "small_negative_float": -0.0000123,
+    #   "leading_zero": 0.1234
+    # }'''
+
+    json_input = '''
+    {
+        "key1" : "value1",
+        "key2": 42,
+        "key3"  :   true,
+        "key4"  : null,
+        "nested": {
+            "innerKey" : [1, 2, 3, 4 ]
+        }
+    }
+    '''
 
     lexer = Lexer(json_input)
     tokens = lexer.tokenize()
