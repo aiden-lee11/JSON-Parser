@@ -31,7 +31,7 @@ ex:
 """
 
 from enum import Enum, auto
-from typing import Optional, Any, List, Tuple
+from typing import List
 from dataclasses import dataclass
 
 
@@ -42,9 +42,9 @@ class TokenType(Enum):
     NUM = auto()
     BOOL = auto()
     NULL = auto()
-    OBJECT = auto()
-    VALUE = auto()
-    ARRAY = auto()
+    # OBJECT = auto()
+    # VALUE = auto()
+    # ARRAY = auto()
     LBRACE = auto()
     RBRACE = auto()
     LBRACKET = auto()
@@ -67,36 +67,36 @@ class Lexer:
     def __init__(self, source: str) -> None:
         self.source = source
         self.tokens: List[Token] = []
-        self.start = 0
         self.current = 0
         self.line = 1
         self.column = 0
 
     def tokenize(self) -> List[Token]:
         while not self.is_at_end():
-            self.start = self.current
+            self.lex_whitespace()
             self.lex_token()
+            self.lex_whitespace()
         return self.tokens
         
     def lex_token(self):
-        char = self.advance()
+        char = self.peek()
 
         match char:
-            case '{': self.add_token(TokenType.LBRACE)
-            case '}': self.add_token(TokenType.RBRACE)
-            case '[': self.add_token(TokenType.LBRACKET)
-            case ']': self.add_token(TokenType.RBRACKET)
-            case ',': self.add_token(TokenType.COMMA)
-            case ':': self.add_token(TokenType.COLON)
+            case '{': self.lex_object()
+            case '[': self.lex_array()
+            case ',': self.add_token(TokenType.COMMA, ',')
+            case ':': self.add_token(TokenType.COLON, ':')
             case '"': self.lex_string()
 
         if self.is_digit(char) or char == '-': self.lex_number()
-
-        if char == " " or self.peekNextTwo() in ['\n', '\r', '\t']: self.lex_whitespace()
   
 
     def lex_string(self):
         res = ""
+
+        # skip the first "
+        start_col = self.column
+        self.advance()
 
         while not self.is_at_end() and self.peek() != '"':
             # reset col and increment line
@@ -141,45 +141,151 @@ class Lexer:
             raise Exception("Expected string terminator received end of stream")
 
         # fall through which means valid and that the cur char is terminator 
+        self.add_token(TokenType.STR, res, start_col)
         self.advance()
 
-        self.add_token(TokenType.STR, res)
-
     def lex_number(self):
+        res = ''
+        start_col = self.column
+
         if self.peek() == "-" and not self.is_digit(self.peek2()):
             raise Exception(f"Expected digit following negative got {self.peek2()} following at line {self.line} and col {self.column}")
 
+        if self.peek() == "-":
+            res += self.advance()
+
         while self.is_digit(self.peek()):
-            self.advance()
+            res += self.advance()
 
         if self.peek() == '.' and not self.is_digit(self.peek2()):
             raise Exception(f"Expected digit following dot got {self.peek2()} following at line {self.line} and col {self.column}")
 
 
         if self.peek() == '.' and self.is_digit(self.peek2()):
-            self.advance()
+            res += self.advance()
 
             while self.is_digit(self.peek()):
-                self.advance()
+                res += self.advance()
 
         if self.peek() in ['e', 'E']:
-            self.advance()
+            res += self.advance()
             if self.peek() in ['+', '-'] or self.is_digit(self.peek()):
-                self.advance()
+                res += self.advance()
                 while self.is_digit(self.peek()):
-                    self.advance()
+                    res += self.advance()
 
-        self.add_token(TokenType.NUM)
+        self.add_token(TokenType.NUM, res, start_col)
 
     def lex_whitespace(self):
-        white_space = ['\n', '\r', '\t']
+        white_space = ['\n', '\r', '\t', " "]
 
-        while not self.is_at_end() and (self.peek() == " " or self.peekNextTwo() in white_space):
-            if self.peek() == " ":
+        while not self.is_at_end() and self.peek() in white_space:
+            if self.peek() == "\n":
+                self.line += 1
+            self.advance()
+
+    def lex_value(self):
+        self.lex_whitespace()
+
+        char = self.peek()
+
+        match char:
+            case '"':
+                self.lex_string()
+            case '{':
+                self.lex_object()
+            case '[':
+                self.lex_array() 
+            case _:
+                if self.is_digit(char) or char == '-':
+                    self.lex_number()
+                elif char.isalpha():
+                    self.lex_keyword()
+                else:
+                    raise Exception(f"Unexpected character in value: {char} at line {self.line} and col {self.column}")
+
+        self.lex_whitespace()
+
+    def lex_object(self):
+        self.add_token(TokenType.LBRACE, '{')
+        self.advance()
+
+        self.lex_whitespace()
+
+        while not self.is_at_end() and self.peek() != '}':
+            if self.peek() != '"':
+                raise Exception(f"Expected string start within object got {self.peek()} at line {self.line} and col {self.column}")
+
+            self.lex_string()
+            self.lex_whitespace()
+
+            if self.peek() != ':':
+                raise Exception(f"Expected colon within object got {self.peek()} at line {self.line} and col {self.column}")
+
+
+            self.add_token(TokenType.COLON, ':')
+            self.advance()
+            self.lex_whitespace()
+            
+            self.lex_value()
+
+            if self.peek() == ',':
+                self.add_token(TokenType.COMMA, ',')
                 self.advance()
-            else:
+                self.lex_whitespace()
+
+        if self.is_at_end():
+            raise Exception("Expected object terminator received end of stream")
+
+        # valid array so handle '}'
+        self.add_token(TokenType.RBRACE, '}')
+        self.advance()
+
+    def lex_array(self):
+        # advance past the '['
+        self.add_token(TokenType.LBRACKET, '[')
+        self.advance()
+
+
+        # clear whitespace
+        self.lex_whitespace()
+
+        while not self.is_at_end() and self.peek() != ']':
+            self.lex_value()
+
+            if self.peek() == ',':
+                self.add_token(TokenType.COMMA, ',')
                 self.advance()
-                self.advance()
+                self.lex_whitespace()
+
+
+        if self.is_at_end():
+            raise Exception("Expected array terminator received end of stream")
+
+        # valid array so handle ']'
+        self.add_token(TokenType.RBRACKET, ']')
+        self.advance()
+
+
+    def lex_keyword(self):
+        keywords = {
+            'true': TokenType.BOOL,
+            'false': TokenType.BOOL,
+            'null': TokenType.NULL
+        }
+
+        start_ind = self.current
+
+        # advance as far as possible if alphanumeric
+        while not self.is_at_end() and self.peek().isalpha():
+            self.advance()
+
+        text = self.source[start_ind: self.current]
+
+        if text not in keywords:
+            raise Exception(f"Unexpected alpha sequence {text}, expected sequence to be a keyword at line {self.line} and col {self.column}")
+
+        self.add_token(keywords[text], text)
 
 
     # looks at curr char DOES NOT REMOVE
@@ -195,15 +301,6 @@ class Lexer:
         
         return self.source[self.current + 1]
     
-    def peekNextTwo(self) -> str:
-        if self.current + 1 >= len(self.source):
-            return '\0'
-        
-        return self.source[self.current: self.current + 1]
-
-    def previous(self) -> str:
-        return self.source[self.current - 1]
-
     # consume and return token
     def advance(self) -> str:
         char = self.source[self.current]
@@ -211,9 +308,9 @@ class Lexer:
         self.column += 1
         return char
 
-    def add_token(self, tokenType: TokenType, value: str | None = None) -> None:
-        text = self.source[self.start: self.current]
-        self.tokens.append(Token(tokenType, value or text, self.line, self.column))
+    def add_token(self, tokenType: TokenType, value: str, start_col=None) -> None:
+        col = start_col if start_col is not None else self.column
+        self.tokens.append(Token(tokenType, value, self.line, col))
 
     def is_at_end(self) -> bool:
         return self.current >= len(self.source)
@@ -228,45 +325,19 @@ class Lexer:
 
 
 if __name__ == "__main__":
-    # Working
-    # json_input = '''{
-    #   "simple": "This is a string",
-    #   "escaped_quote": "She said, \\\"Hello!\\\"",
-    #   "newline": "Line 1\\nLine 2",
-    #   "tab": "Column1\\tColumn2",
-    #   "backslash": "This is a backslash: \\\\",
-    #   "unicode": "Emoji: \\uD83D\\uDE80",
-    #   "mixed": "This \\\"string\\\" has \\t multiple\\nescapes \\\\ and unicode \\u2603"
-    # }'''
-
-
-    # json_input = '''{
-    #   "integer": 42,
-    #   "negative_integer": -42,
-    #   "zero": 0,
-    #   "float": 3.14159,
-    #   "negative_float": -2.71828,
-    #   "exponent_positive": 1.23e4,
-    #   "exponent_negative": 5.67E-8,
-    #   "large_integer": 1234567890,
-    #   "small_negative_float": -0.0000123,
-    #   "leading_zero": 0.1234
-    # }'''
-
-    json_input = '''
-    {
-        "key1" : "value1",
-        "key2": 42,
-        "key3"  :   true,
-        "key4"  : null,
-        "nested": {
-            "innerKey" : [1, 2, 3, 4 ]
-        }
-    }
-    '''
+    json_input = '''{
+      "integer": 42,
+      "negative_integer": -42,
+      "zero": 0,
+      "float": 3.14159,
+      "negative_float": -2.71828,
+      "exponent_positive": 1.23e4,
+      "exponent_negative": 5.67E-8,
+      "large_integer": 1234567890,
+      "small_negative_float": -0.0000123,
+      "leading_zero": 0.1234
+    }'''
 
     lexer = Lexer(json_input)
     tokens = lexer.tokenize()
-    for token in tokens:
-        print(token)
-        print()
+    print(tokens)
