@@ -1,50 +1,13 @@
-""" 
-In JSON, values must be one of the following data types:
-
-    a string
-    a number
-    an object
-    an array
-    a boolean
-    null
-
-JSON Syntax Rules
-
-Data is in name/value pairs
-Data is separated by commas
-Curly braces hold objects
-Square brackets hold arrays
-
-"""
-
-
-"""
-Goal to output array of tokens given a string
-
-
-Tokens will be a tuple with the following (TokenType, val)
-ex: 
-(TOKEN_LBRACE, "{")
-(TOKEN_STRING, "example")
-(TOKEN_BOOL, "true")
-(TOKEN_NUM, "11")
-"""
-
 from enum import Enum, auto
-from typing import List
+from typing import List, Optional, overload, TypeAlias
+from pathlib import Path
 from dataclasses import dataclass
-
-
-JSON_QUOTE = '"'
 
 class TokenType(Enum):
     STR = auto()
     NUM = auto()
     BOOL = auto()
     NULL = auto()
-    # OBJECT = auto()
-    # VALUE = auto()
-    # ARRAY = auto()
     LBRACE = auto()
     RBRACE = auto()
     LBRACKET = auto()
@@ -58,14 +21,34 @@ class Token:
     value: str
     line: int
     column: int
+    
+    def __str__(self) -> str:
+        return f"\n Type: {self.tokenType}\n Value: {self.value}\n Line: {self.line}\n Column {self.column}\n"
 
 
+SourceType: TypeAlias = str
+PathType: TypeAlias = str | Path 
 
-
-# Possibly clear all \n etc whitespace beforehand
 class Lexer:
-    def __init__(self, source: str) -> None:
-        self.source = source
+    @overload
+    def __init__(self, *, source: SourceType) -> None: ...
+    
+    @overload 
+    def __init__(self, *, path: PathType) -> None: ...
+    
+    def __init__(
+        self, 
+        *, 
+        source: Optional[SourceType] = None, 
+        path: Optional[PathType] = None
+    ) -> None:
+        if source is not None and path is not None:
+            raise ValueError("Cannot specify both source and path")
+        if source is None and path is None:
+            raise ValueError("Must specify either source or path")
+            
+        self.source: str = source if source is not None else open(str(path)).read()
+
         self.tokens: List[Token] = []
         self.current = 0
         self.line = 1
@@ -338,6 +321,8 @@ if __name__ == "__main__":
       "leading_zero": 0.1234
     }'''
 
-    lexer = Lexer(json_input)
+    lexer = Lexer(source=json_input)
     tokens = lexer.tokenize()
-    print(tokens)
+
+    for i, token in enumerate(tokens):
+        print(f'Token {i}: {token}')
