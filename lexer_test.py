@@ -1,4 +1,3 @@
-from os import path
 import pytest
 from lexer import Lexer, TokenType
 
@@ -109,3 +108,29 @@ def test_complex_nested(lexer):
 def test_server_response_file(lexer):
     tokens = lexer(path='./examples/server.json').tokenize()
     assert any(token.tokenType == TokenType.STR and token.value == "batters" for token in tokens)
+
+def test_server_complex_file(lexer):
+    tokens = lexer(path='./examples/server_complex.json').tokenize()
+    
+    # Ensure that key structure elements like "batters" and "topping" are identified
+    assert any(token.tokenType == TokenType.STR and token.value == "batters" for token in tokens)
+    assert any(token.tokenType == TokenType.STR and token.value == "topping" for token in tokens)
+    
+    # Check that numbers (like "ppu") and string types (like "type" and "name") are present
+    assert any(token.tokenType == TokenType.NUM and token.value == "0.55" for token in tokens)
+    assert any(token.tokenType == TokenType.STR and token.value == "donut" for token in tokens)
+    
+    # Verify that nested objects and arrays are properly tokenized
+    assert any(token.tokenType == TokenType.LBRACE for token in tokens)
+    assert any(token.tokenType == TokenType.RBRACE for token in tokens)
+    assert any(token.tokenType == TokenType.LBRACKET for token in tokens)
+    assert any(token.tokenType == TokenType.RBRACKET for token in tokens)
+    
+    # Confirm that all strings (like "Cake", "Chocolate", "Maple") are tokenized
+    string_values = [
+        "Cake", "Regular", "Chocolate", "Blueberry", "Devil's Food", 
+        "None", "Glazed", "Sugar", "Powdered Sugar", "Chocolate with Sprinkles", 
+        "Maple"
+    ]
+    for value in string_values:
+        assert any(token.tokenType == TokenType.STR and token.value == value for token in tokens)

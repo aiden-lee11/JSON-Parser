@@ -165,6 +165,7 @@ class Lexer:
         while not self.is_at_end() and self.peek() in white_space:
             if self.peek() == "\n":
                 self.line += 1
+                self.column = 0
             self.advance()
 
     def lex_value(self):
@@ -318,7 +319,8 @@ if __name__ == "__main__":
       "exponent_negative": 5.67E-8,
       "large_integer": 1234567890,
       "small_negative_float": -0.0000123,
-      "leading_zero": 0.1234
+      "leading_zero": 0.1234,
+      "bool": true
     }'''
 
     lexer = Lexer(source=json_input)
